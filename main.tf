@@ -61,3 +61,66 @@ resource "aws_route_table_association" "public" {
   subnet_id = aws_subnet.public.id
   route_table_id = aws_route_table.public.id
 }
+
+# Security group
+
+resource "aws_security_group" "web_sg" {
+  name        = "pixel-tracker-web-sg"
+  description = "Allow HTTP and SSH"
+  vpc_id = aws_vpc.main.id
+
+  # Inbound rule: allow SSH from my public IP
+  ingress {
+    from_port   = 22
+    to_port     = 22
+    protocol    = "tcp"
+    cidr_blocks = ["my_IP/32"]
+    description = "SSH from my laptop"
+  }
+
+  # Inbound rule: allow HTTP from anywhere 
+  ingress {
+    from_port   = 80
+    to_port     = 80
+    protocol    = "tcp"
+    cidr_blocks = ["0.0.0.0/0"]
+    description = "HTTP from the world"
+  }
+
+  # Allow all traffic out
+
+  egress {
+    from_port   = 0
+    to_port     = 0
+    protocol    = "-1"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+
+  tags = {
+    Name = "pixel-tracker-web-sg"
+  }
+}
+
+# EC2 Instance
+resource "aws_instance" "web" {
+  ami = "ami-09fc5668766215f32" // Amazon Linux 2023, eu-central-1
+  instance_type = "t3.micro"
+  subnet_id = aws_subnet.public.id
+  vpc_security_group_ids = [aws_security_group.web_sg.id]
+  associate_public_ip_address = true
+  key_name = "pixel-tracker-key"
+
+  tags = {
+    Name = "pixel-tracker-web"
+  }
+
+# user_data to install Docker on first boot
+  user_data = <<-EOF
+    #!/bin/bash
+    yum update -y
+    yum install -y docker
+    service docker start
+    usermod -a -G docker ec2-user
+  EOF
+
+}
